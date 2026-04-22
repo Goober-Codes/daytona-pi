@@ -150,17 +150,17 @@ Don't explain it. Show it. Every second of explanation you add is a second someo
 
 The Maggie Appleton style rewards a specific kind of post: personal, opinionated, one clear argument. Here's a strong angle:
 
-> **"I learned to read production code by trying to impress someone I've never met"**
+> **"I learned to read production code by actually building with it"**
 
-The argument: the best way to learn a codebase isn't tutorials — it's picking a real target audience (one person, one repo, one PR) and building toward it. The target makes the learning specific. Generic learning produces generic results.
+The argument: the best way to learn a codebase isn't tutorials — it's picking a real target (one repo, one PR, one thing that ships) and building toward it. The constraint makes the learning specific. Generic learning produces generic results.
 
 That's a post developers will share. It's also exactly what you're doing.
 
 **Thread version for X (once the repo is live):**
 ```
 Hook:   I'm a junior dev. I've never contributed to open source.
-        So I decided to try to get Armin Ronacher's attention.
-        Here's what I built (and what I learned reading his code):
+        So I read two production codebases and built something that
+        connected them. Here's what I found:
 
 Body:   3–4 chapters — the two tools, the composability insight,
         the one thing that surprised me in the source
