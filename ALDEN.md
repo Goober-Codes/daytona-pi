@@ -4,24 +4,23 @@ A personal onboarding guide for working on this project. The official project RE
 
 ---
 
-## What is this project?
+## What is Daytona-pi?
 
-**Daytona** is open source infrastructure for running AI agent code in sandboxes. Think of it as a fast, secure, isolated computer you can spin up in under 90ms, run code inside, and throw away. Over 2 million sandboxes per day. It's used by teams building AI coding agents, automated testing pipelines, and anything else that needs to run untrusted code safely.
+**Daytona-pi is Daytona with two critical pieces added: deep network security and durable agent workflows.**
 
-The codebase is a NestJS API (TypeScript), a Go runner/daemon, Docker containers, Postgres, and Redis.
+Daytona today is fast and scalable — sub-90ms sandbox provisioning, 2M+ sandboxes per day. But it has two gaps that limit what AI agents can safely and reliably do inside it:
 
----
+**Gap 1 — Sandboxes can leak secrets.** If an agent running inside a Daytona sandbox has access to `api.github.com`, nothing stops it from reading environment variables and silently POSTing them anywhere. Daytona can only block by IP range. There's no HTTP-level inspection, no secret hiding. A compromised or misbehaving agent can exfiltrate credentials and Daytona can't see it.
 
-## What are we actually building?
+**Daytona-pi fixes this with [Gondolin](https://github.com/earendil-works/gondolin):** a VM-level HTTP/TLS interceptor. The sandbox runs inside a micro-VM. All outbound HTTPS passes through a programmable proxy. Real credentials are never given to the sandbox — they're injected at the proxy level only for explicitly allowed destinations. The agent gets a placeholder token; the real secret never leaves the host.
 
-Daytona has two gaps identified in [`COMPANY.md`](COMPANY.md):
+**Gap 2 — Multi-step agent workflows don't survive crashes.** Daytona's runner is a poll-execute loop. If a multi-step agent task (generate code → run tests → wait for human review → deploy) crashes at step 3, everything reruns from scratch. There's no checkpoint, no resumption, no memory of completed work.
 
-**Gap 1 — Network security is shallow.** Right now, if a sandbox has permission to reach `api.github.com`, code running inside can read environment variables and silently POST them to the internet. Daytona can only block by IP address range — no HTTP-level inspection, no secret hiding, nothing. A project called [**Gondolin**](https://github.com/earendil-works/gondolin) (by Armin Ronacher, who also created Flask) solves this: it runs a micro-VM with a full HTTP/TLS interceptor built in. Secrets are never exposed to the sandboxed code — they're injected at the proxy level only for allowed destinations.
+**Daytona-pi fixes this with [Absurd](https://github.com/earendil-works/absurd):** durable, checkpointed workflows built entirely on Postgres — the same Postgres Daytona already uses. Each step is saved. Crash and restart: resumes from step 3, not step 1. A human review gate that takes hours doesn't block anything — the workflow simply suspends and waits.
 
-**Gap 2 — Workflows don't survive crashes.** Daytona's runner is a simple loop: poll for a job, execute it, done. If a multi-step agent task (generate code → run tests → wait for human review → deploy) crashes halfway through, everything reruns from scratch. A project called [**Absurd**](https://github.com/earendil-works/absurd) (also by Armin) solves this: durable, checkpointed workflows built entirely on Postgres — no extra services, no queue infrastructure, just SQL.
+Together: **Daytona provides the fast compute. Gondolin provides the security. Absurd provides the durability.** An agent that runs inside Daytona-pi can hold credentials, span hours, survive crashes, and wait for humans — without any of those things being possible attack vectors.
 
 Both repos are in `tmp/`:
-
 ```
 tmp/gondolin/   — the VM + network proxy
 tmp/absurd/     — the durable workflow engine
@@ -29,11 +28,13 @@ tmp/absurd/     — the durable workflow engine
 
 ---
 
-## Why would the world find this interesting?
+## Why this matters
 
-- **AI agent security is an unsolved problem right now.** Every team running LLM-generated code in a sandbox is one misconfiguration away from credential exfiltration. The solution described here (VM-level HTTPS interception, not iptables rules) is architecturally stronger than what anyone ships today.
-- **Armin Ronacher** is the intended first audience. He built Flask (you've probably used it), Gondolin, and Absurd. Showing him a real integration of his two tools — especially one that discovers a composability he didn't explicitly design — is a credible way to get on his radar.
-- **The Daytona team** has 72,000 GitHub stars and is actively building. A real upstream PR demonstrating durable agent workflows is something they'd look at.
+**For AI agent teams:** Running LLM-generated code in a sandbox is one misconfiguration away from credential exfiltration. Every team doing this today is exposed in the way Gap 1 describes. VM-level interception is architecturally stronger than iptables rules — it can't be bypassed by raw socket calls inside the container.
+
+**For the open source ecosystem:** Both Gondolin and Absurd were built by Armin Ronacher (mitsuhiko — creator of Flask). Neither was designed for Daytona. This project is the first integration of all three. The composability insight at the core — that Gondolin's `onRequest` hook and Absurd's `awaitEvent()` are the same abstraction — wasn't designed in, it was discovered.
+
+**For the Daytona team:** 72K GitHub stars, actively shipping. A real upstream PR that fills Gap 2 (durable workflows, no new infrastructure) is something they'd merge.
 
 ---
 
@@ -148,23 +149,27 @@ Don't explain it. Show it. Every second of explanation you add is a second someo
 
 ### The blog post hook
 
-The Maggie Appleton style rewards a specific kind of post: personal, opinionated, one clear argument. Here's a strong angle:
+The Maggie Appleton style rewards a specific kind of post: personal, opinionated, one clear argument. Lead with what Daytona-pi is and why it matters — the personal story is the vehicle, not the headline.
 
-> **"I learned to read production code by actually building with it"**
+> **"AI agents can steal your credentials. Here's an architecture that makes it impossible."**
 
-The argument: the best way to learn a codebase isn't tutorials — it's picking a real target (one repo, one PR, one thing that ships) and building toward it. The constraint makes the learning specific. Generic learning produces generic results.
+The argument: iptables rules are the current answer to sandbox network security, and they're not good enough. VM-level interception — where the sandbox literally cannot see the real credential — is the right architecture. Daytona-pi builds it.
 
-That's a post developers will share. It's also exactly what you're doing.
+The personal angle lives in the body: a junior dev reading production codebases, finding a composability two tools' author didn't design, building the thing that connects them.
 
 **Thread version for X (once the repo is live):**
 ```
-Hook:   I'm a junior dev. I've never contributed to open source.
-        So I read two production codebases and built something that
-        connected them. Here's what I found:
+Hook:   Your AI agent has access to api.github.com.
+        Nothing stops it from reading your env vars and
+        POSTing them anywhere. Here's how to fix it architecturally:
 
-Body:   3–4 chapters — the two tools, the composability insight,
-        the one thing that surprised me in the source
-CTA:    "Full PoC at [link]. The deep write-up: [blog link]"
+Body:   Gap 1 (iptables vs VM-level) → Gondolin
+        Gap 2 (stateless vs checkpointed) → Absurd
+        The composability insight
+        What it looks like running
+
+CTA:    "Full PoC: github.com/[you]/daytona-pi
+         Deep write-up: [blog link]"
 ```
 
 ---
