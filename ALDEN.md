@@ -94,6 +94,81 @@ A junior developer learning to read production codebases by building real integr
 
 ---
 
+## Building in public
+
+The work you do on this project is the content. Every file you read, every thing that surprised you, every PR you open — these are posts. You don't need to manufacture anything.
+
+**Your ICP (who you're writing for):** Junior-to-mid developers curious about AI agent infrastructure, open source contribution, and learning by doing. People who want to see someone actually do the thing, not just explain it.
+
+**Platform strategy:**
+- **X/Twitter** — visibility. Short posts, milestones, demo clips. Developer community is here.
+- **Blog (Maggie Appleton style)** — connection. The deep post that converts a viewer into a reader.
+- Pick one and be consistent. Don't try both from day one.
+
+---
+
+### What to post as you work through the phases
+
+The audience-growth playbook says: share what you do in real time. The cooler the thing, the more follows. Here's what "real time" looks like for this project:
+
+**Phase 1 posts (highest shareability):**
+
+| Moment | Post format |
+|--------|------------|
+| You boot a Gondolin VM for the first time | Screenshot of the terminal. "Just ran a QEMU micro-VM with a full HTTP/TLS interceptor from a TypeScript script. Armin Ronacher built this. It's wild." |
+| You intercept your first HTTPS request | Short screen recording (15 sec). The request appearing in your terminal. No explanation needed. |
+| Absurd workflow survives a crash | GIF or video. Kill the process, restart, watch it resume from step 2. "Crashed it. Restarted. It remembered." |
+| You publish the public repo | "Built a PoC wiring Gondolin's `onRequest` hook with Absurd's `awaitEvent()`. Two tools by the same author that were never designed to talk to each other. They do now." + link |
+
+**Phase 2 posts:**
+- "Reading `job.service.ts` in the Daytona codebase. This is how a real NestJS service handles job dispatch with Redis BRPOP. Thread on what I found." (thread opportunity)
+- "Opened my first draft PR to a 72K-star repo." Screenshot of the PR. Nothing else needed.
+
+**Phase 3 posts:**
+- "Learning Go to delete 440 lines of it." One-liner. High engagement.
+- "The iptables approach to sandbox network security can be bypassed by raw sockets. The VM-level approach cannot. Here's why." Thread.
+
+---
+
+### Demo video structure (for the blog post and X)
+
+1 minute max. Follow this structure:
+
+```
+0:00–0:01   Hook        — Bold text: "AI agent sandbox. Zero credential leakage."
+0:01–0:05   Show it     — Gondolin intercepting a request (no talking)
+0:05–0:10   Setup       — "I'm running code in a sandbox that has my GitHub token."
+0:10–0:50   Demo        — Full workflow: request intercepted → policy prompt → approved/denied → result
+0:50–1:00   Close       — "The sandbox never saw the real token. github.com/[you]/daytona-pi"
+```
+
+Don't explain it. Show it. Every second of explanation you add is a second someone stops watching.
+
+---
+
+### The blog post hook
+
+The Maggie Appleton style rewards a specific kind of post: personal, opinionated, one clear argument. Here's a strong angle:
+
+> **"I learned to read production code by trying to impress someone I've never met"**
+
+The argument: the best way to learn a codebase isn't tutorials — it's picking a real target audience (one person, one repo, one PR) and building toward it. The target makes the learning specific. Generic learning produces generic results.
+
+That's a post developers will share. It's also exactly what you're doing.
+
+**Thread version for X (once the repo is live):**
+```
+Hook:   I'm a junior dev. I've never contributed to open source.
+        So I decided to try to get Armin Ronacher's attention.
+        Here's what I built (and what I learned reading his code):
+
+Body:   3–4 chapters — the two tools, the composability insight,
+        the one thing that surprised me in the source
+CTA:    "Full PoC at [link]. The deep write-up: [blog link]"
+```
+
+---
+
 ## What ends up publicly visible
 
 Each phase produces something on your GitHub profile:
