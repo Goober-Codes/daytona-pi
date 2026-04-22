@@ -1,402 +1,407 @@
-# ALDEN.md
+# ALDEN.md — Your Guide to This Fork
 
-A personal onboarding guide for working on this project. The official project README is at [`README.md`](README.md) — read that first for a full picture of what Daytona is.
+## Why this fork exists
 
----
+Daytona is excellent infrastructure. Sub-90ms sandbox provisioning, 2M+ sandboxes per day, SDKs in every language. But it has two gaps that matter for AI agents:
 
-## What is Daytona-pi?
+1. **Sandboxes can exfiltrate secrets.** If an agent has access to `api.github.com`, nothing stops it reading env vars and POSTing them anywhere. The current network policy is 440 lines of Go wrapping iptables — CIDR allowlists only. No HTTP inspection, no secret hiding. A misbehaving agent can drain credentials and Daytona can't see it.
 
-**Daytona-pi is Daytona with two critical pieces added: deep network security and durable agent workflows.**
+2. **Multi-step agent workflows don't survive crashes.** Daytona's runner is a poll-execute loop. There's no checkpoint, no resumption. If a task (generate → test → human review → deploy) crashes at step 3, everything reruns from scratch.
 
-Daytona today is fast and scalable — sub-90ms sandbox provisioning, 2M+ sandboxes per day. But it has two gaps that limit what AI agents can safely and reliably do inside it:
+This fork fixes both by integrating two open-source tools by Armin Ronacher (creator of Flask):
 
-**Gap 1 — Sandboxes can leak secrets.** If an agent running inside a Daytona sandbox has access to `api.github.com`, nothing stops it from reading environment variables and silently POSTing them anywhere. Daytona can only block by IP range. There's no HTTP-level inspection, no secret hiding. A compromised or misbehaving agent can exfiltrate credentials and Daytona can't see it.
+| Problem | Current | This Fork | Key gain |
+|---|---|---|---|
+| Network security | iptables CIDR rules | **Gondolin** VM-level MITM | Secrets never leave the host. Bypass-proof. |
+| Workflow durability | Stateless poll-execute loop | **Absurd** on Postgres | Crash → resume from last step. No reruns. |
 
-**Daytona-pi fixes this with [Gondolin](https://github.com/earendil-works/gondolin):** a VM-level HTTP/TLS interceptor. The sandbox runs inside a micro-VM. All outbound HTTPS passes through a programmable proxy. Real credentials are never given to the sandbox — they're injected at the proxy level only for explicitly allowed destinations. The agent gets a placeholder token; the real secret never leaves the host.
-
-**Gap 2 — Multi-step agent workflows don't survive crashes.** Daytona's runner is a poll-execute loop. If a multi-step agent task (generate code → run tests → wait for human review → deploy) crashes at step 3, everything reruns from scratch. There's no checkpoint, no resumption, no memory of completed work.
-
-**Daytona-pi fixes this with [Absurd](https://github.com/earendil-works/absurd):** durable, checkpointed workflows built entirely on Postgres — the same Postgres Daytona already uses. Each step is saved. Crash and restart: resumes from step 3, not step 1. A human review gate that takes hours doesn't block anything — the workflow simply suspends and waits.
-
-Together: **Daytona provides the fast compute. Gondolin provides the security. Absurd provides the durability.** An agent that runs inside Daytona-pi can hold credentials, span hours, survive crashes, and wait for humans — without any of those things being possible attack vectors.
-
-Both repos are in `tmp/`:
-```
-tmp/gondolin/   — the VM + network proxy
-tmp/absurd/     — the durable workflow engine
-```
+**After both phases:**
+- Sandbox credentials are injected at the VM proxy level — agent code gets a placeholder, real token stays on host
+- Agent workflows checkpoint every step to the same Postgres Daytona already runs
+- `apps/runner/pkg/netrules/` (440 lines of iptables Go) deleted entirely — replaced by Gondolin
+- `apps/api/src/sandbox/services/job.service.ts` Redis queue replaced by Absurd — no new infrastructure
+- Everything open source, no new services
 
 ---
 
-## Why this matters
+## Hi Alden
 
-**For AI agent teams:** Running LLM-generated code in a sandbox is one misconfiguration away from credential exfiltration. Every team doing this today is exposed in the way Gap 1 describes. VM-level interception is architecturally stronger than iptables rules — it can't be bypassed by raw socket calls inside the container.
+You're going to build this. Each phase is a self-contained PR that makes the system meaningfully better. As a side effect, each phase teaches you a concrete layer of how production systems are built — by reading and modifying real code, not tutorials.
 
-**For the open source ecosystem:** Both Gondolin and Absurd were built by Armin Ronacher (mitsuhiko — creator of Flask). Neither was designed for Daytona. This project is the first integration of all three. The composability insight at the core — that Gondolin's `onRequest` hook and Absurd's `awaitEvent()` are the same abstraction — wasn't designed in, it was discovered.
-
-**For the Daytona team:** 72K GitHub stars, actively shipping. A real upstream PR that fills Gap 2 (durable workflows, no new infrastructure) is something they'd merge.
-
----
-
-## What you'll learn
-
-This project is designed as a learning sequence through production code. No tutorials. You read real source files, understand what they do, then build something small that proves you understood it.
-
-By the end of each phase you will have:
-
-**Phase 1 — TypeScript + systems thinking**
-- How a VM-level HTTPS proxy works (Gondolin's network stack)
-- What durable execution means and why it matters (Absurd's checkpoint model)
-- How to wire two systems together that weren't designed for each other
-- How to write a public README that makes a technical insight legible to someone smart
-
-**Phase 2 — NestJS + database migrations**
-- How a real NestJS service handles job dispatch (reading `apps/api/src/sandbox/services/job.service.ts`)
-- How Redis BRPOP works and why it's used for job queues
-- How to replace a queue backend without changing the interface
-- How to write a raw SQL migration inside a TypeORM project
-
-**Phase 3 — Go + container networking**
-- How Daytona's Go runner provisions Docker containers (`apps/runner/pkg/docker/create.go`)
-- How iptables network rules work and why VM-level interception is harder to bypass
-- How to call a Node.js SDK from a Go service (subprocess or FFI)
-- How to write a PR that makes an architectural argument, not just ships code
+By the end, you'll have:
+- Real PRs on a 72K-star public GitHub repo
+- A public reference implementation others can run and learn from
+- Deep working knowledge of how NestJS services, job queues, container networking, and durable workflows actually work
+- A blog post per phase with a demo recording
 
 ---
 
 ## Use Daytona for your own projects
 
-Don't just study Daytona — use it. Every project you're already working on should run its code inside a Daytona sandbox. This is the fastest way to understand what it actually does, find the gaps, and have something real to write about.
+Don't just study this as an isolated project. **Use it.**
 
-Practical starting point: pick one of your existing projects and replace wherever you currently run code locally with a Daytona sandbox. Use the Python or TypeScript SDK. When something feels awkward or breaks, that's a bug report or a PR.
+Pick one of your own repos and run its code inside a Daytona sandbox using the Python or TypeScript SDK. That's the real test — does the thing work on something you actually care about?
 
----
-
-## Write about it
-
-The goal is one public blog post, written in the style of [Maggie Appleton's digital garden](https://maggieappleton.com) — evergreen notes, a "planted on" date, honest and personal, essay-length. Not a tutorial. A point of view.
-
-**Inspiration to read first:**
-- Maggie's talk *"One Developer, Two Dozen Agents, Zero Alignment"* — the argument that all coding agents are single-player and that's wrong. The framing here (coordination over individual productivity, craft over volume) is a good lens for writing about what you're learning with Daytona.
-- [ColeMurray/background-agents](https://github.com/ColeMurray/background-agents) — a public repo showing background agent patterns. Look at how it's structured as a learning resource and how people engage with it.
-- The "paperclip maximizer" thought experiment — relevant if you write about AI agents that can exfiltrate secrets (Gap 1 in this project). An agent optimising for a goal with no constraints is the abstract version of what Gondolin is preventing architecturally.
-
-**What the post could be about:**
-A junior developer learning to read production codebases by building real integrations — not tutorials, not toy projects. What that actually feels like. What you found in the code that surprised you. Why Gondolin's `docker.json` example changed how you thought about VM isolation. What it means to make a real PR to a 72K-star repo as your first open source contribution.
-
-**It must include a demo recording.** Not a screen recording of typing — a demo of the thing working. Gondolin intercepting an HTTPS call. Absurd resuming a workflow after a crash. Something that makes someone watching say "oh, I get it now." Tools: Loom, Asciinema, or a short MP4 embedded in the post.
-
-**Format (Maggie Appleton style):**
-- Title that says something, not just describes the topic
-- "Planted [date]" at the top
-- Personal, first-person, specific — not generic developer content
-- One clear argument the reader can disagree with
-- Ends with an open question, not a conclusion
+Every time you use Daytona on your own project, you experience the system from both sides: as someone building it, and as someone depending on it. That dual perspective is what makes the blog post worth reading. The screen recording of the agent working on your actual code is the demo.
 
 ---
 
-## Building in public
+## Writing About What You Learn
 
-The work you do on this project is the content. Every file you read, every thing that surprised you, every PR you open — these are posts. You don't need to manufacture anything.
+After each phase, write about it. Not a tutorial — a reflection. What did you expect? What surprised you? What broke?
 
-**Your ICP (who you're writing for):** Junior-to-mid developers curious about AI agent infrastructure, open source contribution, and learning by doing. People who want to see someone actually do the thing, not just explain it.
+Model your writing on [Maggie Appleton's digital garden](https://maggieappleton.com) — personal, well-researched, specific, readable. Her posts start from a lived experience, explain the mechanism, and land on a clear argument. Before writing, read her talk *"One Developer, Two Dozen Agents, Zero Alignment"* for the framing: coordination > individual productivity, craft > volume.
 
-**Platform strategy:**
-- **X/Twitter** — visibility. Short posts, milestones, demo clips. Developer community is here.
-- **Blog (Maggie Appleton style)** — connection. The deep post that converts a viewer into a reader.
-- Pick one and be consistent. Don't try both from day one.
+Also look at [ColeMurray/background-agents](https://github.com/ColeMurray/background-agents) for how a public learning repo can become a reference others build on. And read about the "paperclip maximizer" thought experiment — the abstract version of Gap 1. An agent optimising for a goal with no network constraints is the AI safety version of what Gondolin is solving architecturally.
 
----
-
-### What to post as you work through the phases
-
-The audience-growth playbook says: share what you do in real time. The cooler the thing, the more follows. Here's what "real time" looks like for this project:
-
-**Phase 1 posts (highest shareability):**
-
-| Moment | Post format |
-|--------|------------|
-| You boot a Gondolin VM for the first time | Screenshot of the terminal. "Just ran a QEMU micro-VM with a full HTTP/TLS interceptor from a TypeScript script. Armin Ronacher built this. It's wild." |
-| You intercept your first HTTPS request | Short screen recording (15 sec). The request appearing in your terminal. No explanation needed. |
-| Absurd workflow survives a crash | GIF or video. Kill the process, restart, watch it resume from step 2. "Crashed it. Restarted. It remembered." |
-| You publish the public repo | "Built a PoC wiring Gondolin's `onRequest` hook with Absurd's `awaitEvent()`. Two tools by the same author that were never designed to talk to each other. They do now." + link |
-
-**Phase 2 posts:**
-- "Reading `job.service.ts` in the Daytona codebase. This is how a real NestJS service handles job dispatch with Redis BRPOP. Thread on what I found." (thread opportunity)
-- "Opened my first draft PR to a 72K-star repo." Screenshot of the PR. Nothing else needed.
-
-**Phase 3 posts:**
-- "Learning Go to delete 440 lines of it." One-liner. High engagement.
-- "The iptables approach to sandbox network security can be bypassed by raw sockets. The VM-level approach cannot. Here's why." Thread.
-
----
-
-### Demo video structure (for the blog post and X)
-
-1 minute max. Follow this structure:
+### Post format
 
 ```
-0:00–0:01   Hook        — Bold text: "AI agent sandbox. Zero credential leakage."
-0:01–0:05   Show it     — Gondolin intercepting a request (no talking)
-0:05–0:10   Setup       — "I'm running code in a sandbox that has my GitHub token."
-0:10–0:50   Demo        — Full workflow: request intercepted → policy prompt → approved/denied → result
-0:50–1:00   Close       — "The sandbox never saw the real token. github.com/[you]/daytona-pi"
-```
+Title: [Something specific]
+  Good: "The 440 lines of Go I deleted — and what replaced them"
+  Bad:  "What I learned about container networking"
 
-Don't explain it. Show it. Every second of explanation you add is a second someone stops watching.
+Planted: [date]
+Tags:    [2-3 topic tags]
 
 ---
 
-### The blog post hook
-
-The Maggie Appleton style rewards a specific kind of post: personal, opinionated, one clear argument. Lead with what Daytona-pi is and why it matters — the personal story is the vehicle, not the headline.
-
-> **"AI agents can steal your credentials. Here's an architecture that makes it impossible."**
-
-The argument: iptables rules are the current answer to sandbox network security, and they're not good enough. VM-level interception — where the sandbox literally cannot see the real credential — is the right architecture. Daytona-pi builds it.
-
-The personal angle lives in the body: a junior dev reading production codebases, finding a composability two tools' author didn't design, building the thing that connects them.
-
-**Thread version for X (once the repo is live):**
+[Opening: one concrete thing that happened — not "in this post I will..."]
+[The mechanism: what actually changed in the code, with snippets]
+[The surprise: what you didn't expect to find]
+[The argument: what this teaches about the broader system]
+[The demo: embed your screen recording here]
 ```
-Hook:   Your AI agent has access to api.github.com.
-        Nothing stops it from reading your env vars and
-        POSTing them anywhere. Here's how to fix it architecturally:
 
-Body:   Gap 1 (iptables vs VM-level) → Gondolin
-        Gap 2 (stateless vs checkpointed) → Absurd
-        The composability insight
-        What it looks like running
+**Suggested title angles per phase:**
 
-CTA:    "Full PoC: github.com/[you]/daytona-pi
-         Deep write-up: [blog link]"
+| Phase | Title angle |
+|---|---|
+| Phase 1 | "I built a sandbox that can't leak secrets — here's the architecture" |
+| Phase 2 | "Replacing a Redis queue with Postgres-native durable execution (in a 72K-star repo)" |
+| Phase 3 | "Deleting 440 lines of iptables Go and what we put in its place" |
+
+### The demo recording (required)
+
+Under 60 seconds. Structure:
+
 ```
+0:00–0:01  HOOK     Bold text on screen: what you built. No talking yet.
+0:01–0:05  SHOW     The thing running — before you explain anything
+0:05–0:10  SETUP    One sentence: what problem this solves
+0:10–0:50  DEMO     One complete workflow on one of YOUR OWN projects
+0:50–1:00  CLOSE    Repo URL. Nothing else.
+```
+
+Don't narrate. Show it. Every second of explanation is a second someone stops watching.
+
+Tools: QuickTime → upload YouTube unlisted → embed in post.
+
+### Promoting each post (X/Twitter)
+
+Each post gets a companion thread. Hook is 95% of whether anyone reads it.
+
+**Hook formula — 3 lines:**
+- Line 1: Why this matters
+- Line 2: The challenge or surprise
+- Line 3: Tease what's coming
+
+**Phase 1 hook example:**
+```
+Your AI agent has access to api.github.com.
+Nothing stops it reading your env vars and POSTing them anywhere.
+Here's the architecture that makes that impossible:
+```
+
+**Phase 2 hook example:**
+```
+I just replaced a Redis queue in a 72K-star repo with pure Postgres.
+The Redis queue dispatched sandbox jobs. Absurd does it durably.
+Here's everything I changed (and what I broke first):
+```
+
+End every thread with: `1. Read the full post: [link]  2. Retweet tweet 1`
 
 ---
 
 ## What ends up publicly visible
 
-Each phase produces something on your GitHub profile:
-
 | Phase | Public artifact |
 |-------|----------------|
-| 1 | New repo: `[you]/daytona-gondolin-absurd` — a reference implementation others can run |
-| 2 | Fork of `daytonaio/daytona` + draft PR: `feat/absurd-workflow-engine` |
-| 3 | Second PR on the same fork: `feat/gondolin-sandbox-runtime` |
+| 1 (PoC) | New public repo `[you]/daytona-gondolin-absurd` — runnable reference implementation |
+| 2 (Absurd) | Fork of `daytonaio/daytona` + draft PR `feat/absurd-workflow-engine` |
+| 3 (Gondolin) | Second PR on same fork `feat/gondolin-sandbox-runtime` |
 
-A merged PR on a 72K-star repo is a meaningful portfolio item.
-
----
-
-## The design doc
-
-The full technical design (architecture diagrams, exact files to read, code patterns for each phase) lives here:
-
-```
-docs/design.md
-```
-
-Or read it in your editor. It has:
-- Exact files to read before writing any code for each phase
-- The correct code patterns (including known architectural constraints)
-- What to say in each PR description
-- Open questions to verify before starting Phase 2
+A merged PR on a 72K-star repo is a meaningful portfolio item. Phase 1 ships first and stands alone — you can link it before Phase 2 is started.
 
 ---
 
-## How to use gstack (the AI assistant)
+## What You're Going to Build — Three Phases
 
-This project uses [gstack](https://github.com/garrytan/gstack), a set of AI workflow skills layered on top of Claude Code. It's already installed.
+### Phase 1: Standalone PoC (~2 weeks)
+**Goal:** Prove that Gondolin and Absurd compose. Build a public reference implementation.
+**Public artifact:** New repo `[you]/daytona-gondolin-absurd`
 
-**To continue this design session:**
+**Read first — in this order:**
 ```
-/office-hours
-```
-This picks up where we left off — the design doc is loaded automatically.
-
-**To plan the engineering implementation of a phase:**
-```
-/plan-eng-review
-```
-The skill reads the design doc and helps you break it into concrete tasks.
-
-**To get a code review before opening a PR:**
-```
-/review
+tmp/gondolin/host/src/index.ts               — VM.create() API surface
+tmp/gondolin/host/src/http/hooks.ts          — createHttpHooks() and onRequest shape
+tmp/gondolin/host/src/qemu/contracts.ts      — HttpHooks type definition
+tmp/gondolin/host/examples/docker.json       — Docker-inside-VM pattern
+tmp/gondolin/host/examples/docker-init-extra.sh — how MITM CA is injected into containers
+tmp/absurd/sdks/typescript/examples/agent-loop/agent-loop.ts — ctx.step() pattern
+tmp/absurd/sql/absurd.sql                    — skim the header comments
 ```
 
-**To ship a phase (commit + PR):**
+**What you'll build:**
 ```
-/ship
+daytona-gondolin-absurd/
+  README.md                   — the insight + how to run it
+  docker-compose.yml          — Gondolin process + Absurd worker + Postgres
+  src/
+    gondolin-vm.ts            — VM.create() with onRequest hook
+    absurd-worker.ts          — registerTask, ctx.step(), Postgres poll for policy
+    policy-resolver.ts        — CLI: approve/deny intercepted requests from terminal
+  schema.sql                  — absurd.sql + network_events table
 ```
 
-You don't need to know all of these upfront. Start with `/office-hours` if you have questions about the design, and `/plan-eng-review` when you're ready to start a phase.
+**Key architectural constraint:** Gondolin's `onRequest` hook is async and can `await` a Promise — but Absurd's `ctx.awaitEvent()` works by throwing a `SuspendTask` exception to exit the task handler. Calling `ctx.awaitEvent()` from inside an `onRequest` callback crashes the VM host. The correct pattern: the hook polls a Postgres `network_events` table directly using a lightweight sleep loop. The `policy-resolver.ts` CLI writes the decision there. See `docs/design.md` for the full working pattern.
 
----
+**What you'll learn:**
+- How a VM-level HTTPS proxy intercepts traffic without the guest knowing
+- What durable execution actually means — step checkpointing, suspension, replay
+- How to wire two systems that weren't designed for each other
 
-## Where to start
-
-**Right now:**
-
+**Verify before writing code:**
 ```bash
-# 1. Verify QEMU is installed
 brew install qemu node
-qemu-system-aarch64 --version
-
-# 2. Verify Gondolin builds
+qemu-system-aarch64 --version          # should print a version
 cd tmp/gondolin && npm install
-npx tsx host/examples/basic-usage.ts   # a VM should boot
-
-# 3. Verify Absurd's schema looks sane
-head -60 tmp/absurd/sql/absurd.sql
-
-# 4. Read these files (in order, before writing any code):
-#    tmp/gondolin/host/src/index.ts
-#    tmp/gondolin/host/src/http/hooks.ts
-#    tmp/gondolin/host/examples/docker.json
-#    tmp/absurd/sdks/typescript/examples/agent-loop/agent-loop.ts
+npx tsx host/examples/basic-usage.ts   # a VM should boot (no 'bash' CLI subcommand)
+cd ../absurd && head -60 sql/absurd.sql # read the schema header
 ```
-
-**Then:** Create a new public GitHub repo called `daytona-gondolin-absurd` and start with `src/gondolin-vm.ts` — a single `VM.create()` call with an `onRequest` hook that logs intercepted URLs to stdout.
-
-The full step-by-step is in the design doc.
 
 ---
 
-## Technical reference
+### Phase 2: Absurd into Daytona's job queue (~1 month)
+**Goal:** Replace Redis BRPOP in `job.service.ts` with Absurd. First real Daytona PR.
+**Public artifact:** Fork of `daytonaio/daytona` + draft PR `feat/absurd-workflow-engine`
 
-### The gaps in detail
-
-**Gap 1 — Network security**
-
-Daytona's entire network policy today:
-
+**Read first — in this order:**
 ```
-apps/runner/pkg/netrules/ — 440 lines of Go wrapping iptables
-```
-
-It creates per-sandbox chains in `DOCKER-USER` that allow/drop based on destination CIDR ranges. That's it. No request inspection, no secret mediation, no HTTP-level hooks.
-
-Gondolin's network stack is 4,656 lines of TypeScript that implements:
-- Full HTTP/TLS MITM proxy (`mitm.ts` + `qemu/http.ts`)
-- Per-request JS hooks (`onRequest` / `onResponse`)
-- Secret placeholder substitution in headers
-- Host pattern matching with wildcards
-- WebSocket mediation
-- DNS modes (synthetic / trusted / open)
-
-**Gap 2 — Workflow durability**
-
-Daytona's runner today:
-
-```
-apps/runner/pkg/runner/v2/poller/   — polls API for jobs
-apps/runner/pkg/runner/v2/executor/ — executes jobs (create/start/stop/destroy)
+apps/api/src/sandbox/services/job.service.ts          — Redis BRPOP queue (what you're replacing)
+apps/api/src/sandbox/services/job-state-handler.service.ts — job state transitions
+apps/api/src/sandbox/entities/job.entity.ts           — Job schema
+apps/api/src/webhook/                                  — where lifecycle events are emitted
+apps/runner/pkg/runner/v2/poller/                      — Go runner polls HTTP API (NOT Redis)
+tmp/absurd/sdks/typescript/src/index.ts                — Absurd SDK: spawn(), startWorker(), awaitEvent()
+tmp/absurd/sql/absurd.sql                              — full schema (~1400 lines PL/pgSQL)
 ```
 
-The API has a `JobService` backed by Postgres + Redis, but only for infrastructure operations. There is no concept of multi-step workflows, crash recovery, event-driven suspension, or step-level retry.
+**Important before touching anything:**
+- The Go runner never touches Redis. It polls the Daytona API over HTTP (`PollJobs`). Only `job.service.ts` in the NestJS API uses Redis BRPOP. **The Go runner does not change in Phase 2.**
+- `absurd.sql` is 1,400 lines of PL/pgSQL with a custom `absurd` schema. Apply it as a raw TypeORM migration using `queryRunner.query(fs.readFileSync('migrations/absurd.sql', 'utf8'))` — not auto-generated entity DDL.
+
+**What changes:**
+```
+apps/api/src/sandbox/services/job.service.ts
+  1. Remove @InjectRedis() constructor param + InjectRedis import
+  2. Remove BullModule/RedisModule from the NestJS module imports
+  3. Add AbsurdModule + Absurd instance — replace BRPOP with absurd.spawn() / startWorker()
+
+apps/api/src/webhook/services/
+  → calls absurdApp.emitEvent() on sandbox.created, sandbox.state.updated
+
+migrations/
+  → new file: absurd.sql (raw migration)
+```
+
+**Durable sandbox lifecycle:**
+```typescript
+absurd.registerTask({ name: "sandbox-lifecycle" }, async (params, ctx) => {
+  await ctx.step("provision", () => sandboxService.create(params.id));
+  await ctx.awaitEvent(`sandbox.started.${params.id}`);   // webhook emits this
+  await ctx.step("execute", () => runAgentCode(params));
+  await ctx.awaitEvent(`sandbox.stopped.${params.id}`);
+  await ctx.step("destroy", () => sandboxService.destroy(params.id));
+});
+```
+
+**Latency tradeoff to call out in the PR:** Redis BRPOP dispatch ~1ms. Absurd's pull model ~100ms configurable poll interval. Flag this explicitly; the Daytona team will ask.
+
+**What you'll learn:**
+- How a real NestJS service handles job dispatch with blocking Redis queues
+- How to replace a queue backend without changing the interface above it
+- How to apply a large raw SQL schema inside a TypeORM migration project
 
 ---
 
-### Integration points
+### Phase 3: Gondolin replaces Docker sandbox runtime (~2–3 months)
+**Goal:** Daytona sandboxes become Gondolin VMs. Delete the iptables code.
+**Public artifact:** Second PR on same fork `feat/gondolin-sandbox-runtime`
 
-**Gondolin → Daytona Runner**
-
+**Read first — in this order:**
 ```
-Current:
-  Runner → Docker container → iptables CIDR rules → internet
-
-With Gondolin:
-  Runner → Gondolin VM → Docker container inside VM → Gondolin network stack → internet
-                                  ↓
-                            secret substitution
-                            request/response inspection
-                            per-host allowlists with JS hooks
-```
-
-Files that change:
-- `apps/runner/pkg/netrules/` — deleted entirely (Gondolin replaces this)
-- `apps/runner/pkg/docker/create.go` — `DockerClient.Create()` → `GondolinClient.Create()`
-- `apps/runner/pkg/docker/network.go` — `UpdateNetworkSettings()` → Gondolin `httpHooks` config
-
-**Absurd → Daytona API**
-
-```
-Current:
-  SDK → API → create sandbox → run code → done (stateless)
-
-With Absurd:
-  SDK → API → Absurd task spawned →
-    step("provision")              → create sandbox
-    step("execute")                → run agent code
-    step("validate")               → check results
-    awaitEvent("human.approved")   → suspend until review
-    step("deploy")                 → push to production
-
-  (crash at any point → resumes from last checkpoint)
+apps/runner/pkg/docker/create.go              — DockerClient.Create() (what you're replacing)
+apps/runner/pkg/docker/network.go             — UpdateNetworkSettings() (iptables calls)
+apps/runner/pkg/netrules/                     — entire package (440 lines, 7 files) to delete
+tmp/gondolin/host/src/vm/                     — VM lifecycle API
+tmp/gondolin/host/src/http/                   — HTTP hook utilities
+tmp/gondolin/host/examples/docker.json        — Docker-inside-VM config
+tmp/gondolin/host/examples/docker-init-extra.sh — how dockerd runs inside the VM
 ```
 
-Files that change:
-- `apps/api/src/sandbox/services/job.service.ts` — Redis BRPOP queue → Absurd `spawn()` / `startWorker()`
-- `apps/api/src/webhook/` — lifecycle events → `absurd.emitEvent()`
+**What changes:**
+```
+apps/runner/pkg/
+  gondolin/               ← new package (Go → Gondolin Node.js SDK via subprocess)
+    client.go             — GondolinClient wrapping VM.create() / VM.close()
+    config.go             — maps SandboxDTO to Gondolin VM options
+  docker/create.go        — DockerClient.Create() → GondolinClient.Create()
+  docker/network.go       — UpdateNetworkSettings() → httpHooks config on VM
+  netrules/               ← deleted entirely
+```
+
+**Open question to resolve before starting:** Does the Daytona runner host expose `/dev/kvm`? QEMU without KVM acceleration is significantly slower than Docker containers. Verify on the target Linux host before committing to this approach.
+
+**What you'll learn:**
+- How Daytona's Go runner provisions and manages Docker containers
+- How iptables per-sandbox chains work and why they're bypassable
+- How to call a Node.js SDK from a Go service (subprocess with JSON IPC)
+- How to write a PR that makes an architectural argument, not just ships code
 
 ---
 
-### What it all looks like together
+## What You'll Learn — Architecture Layer Map
 
-```
-Daytona (infra + orchestration)
-├── Absurd (durable workflow engine on Postgres)
-│   ├── Multi-step agent tasks with checkpointing
-│   ├── Event-driven suspension (human review, external signals)
-│   └── Retry without re-execution of completed steps
-│
-├── Gondolin network stack (per-sandbox VM)
-│   ├── HTTP/TLS request interception
-│   ├── Secret placeholder injection
-│   ├── Per-host allowlists with JS hooks
-│   └── DNS policy control
-│
-└── Existing Daytona (unchanged)
-    ├── Sub-90ms sandbox provisioning
-    ├── Docker/OCI container runtime
-    ├── SDKs (Python/TS/Go/Ruby)
-    ├── Snapshots, volumes, lifecycle
-    └── Dashboard, billing, multi-region
-```
-
-Daytona provides the compute. Gondolin provides the security. Absurd provides the durability.
+| Layer | Concept | When You Learn It |
+|---|---|---|
+| Systems thinking | What a MITM proxy is; what durable execution means | Phase 1 — read Gondolin + Absurd source |
+| Async messaging | Event-driven arch, job queues, BRPOP vs poll | Phase 2 — read `job.service.ts` |
+| Service interfaces | How NestJS modules + DI work; replacing backends | Phase 2 — the job.service rewrite |
+| Data layer | Postgres-native workflows; raw SQL migrations | Phase 2 — applying `absurd.sql` |
+| Container networking | iptables chains; Docker sandbox lifecycle | Phase 3 — read `netrules/` |
+| Cross-language FFI | Go calling Node.js SDK via subprocess | Phase 3 — GondolinClient |
 
 ---
 
-### Project backgrounds
+## How to Navigate the Codebase
 
-**Daytona**
-- Repo: [daytonaio/daytona](https://github.com/daytonaio/daytona) — 72,360 stars
-- Stack: NestJS API, Go runner/daemon/CLI, Docker containers, Postgres, Redis
-- Latest: v0.168.0 (April 21, 2026)
-- Scale: 2M+ sandboxes/day, sub-90ms provisioning
+```
+apps/
+  api/                    NestJS — the brain (TypeScript)
+    src/sandbox/          Sandbox service, job dispatch, entities
+    src/webhook/          Lifecycle event emission
+  runner/                 Go — the compute plane
+    pkg/docker/           Docker container management
+    pkg/netrules/         iptables network policy (deleted in Phase 3)
+    pkg/runner/v2/        Poller + executor
+  daemon/                 Go — runs inside each sandbox
+  dashboard/              Next.js — web UI
+  cli/                    Go — CLI
 
-**Gondolin**
-- Repo: [earendil-works/gondolin](https://github.com/earendil-works/gondolin) — 962 stars
-- Author: Armin Ronacher (mitsuhiko) — creator of Flask
-- Stack: TypeScript control plane, QEMU/libkrun backends, JS-implemented network stack
-- Latest: v0.7.0 (March 2026)
-- Key feature: guest code never sees real credentials — secrets are injected at the proxy level only for allowed destinations
+tmp/                      Reference repos (read-only, don't edit)
+  gondolin/               Gondolin micro-VM + network proxy
+  absurd/                 Absurd durable execution engine
 
-**Absurd**
-- Repo: [earendil-works/absurd](https://github.com/earendil-works/absurd) — 1,568 stars
-- Author: Armin Ronacher (mitsuhiko)
-- Stack: single `absurd.sql` file + thin SDKs for TypeScript, Python, Go
-- Latest: v0.3.0 (April 2, 2026)
-- Key feature: no extra services beyond Postgres — drops into any existing database
+docs/
+  design.md               Full technical design doc — read this before Phase 2+
+```
+
+**Key files to read first, in order:**
+1. `README.md` — what Daytona is
+2. `docs/design.md` — full design: code patterns, open questions, PR descriptions
+3. `apps/api/src/sandbox/services/job.service.ts` — before Phase 2
+4. `apps/runner/pkg/docker/create.go` — before Phase 3
 
 ---
 
-## One thing worth knowing
+## How to Work on This (Using gstack)
 
-The core insight that makes this project worth building:
+We use [gstack](https://github.com/garrytan/gstack) for structured work sessions. It's already installed.
+
+| Command | When to use |
+|---|---|
+| `/office-hours` | Design a phase, challenge assumptions, produce a design doc |
+| `/plan-eng-review` | Break a phase into concrete implementation tasks |
+| `/investigate` | Something is broken and you don't know why |
+| `/review` | Before opening a PR |
+| `/ship` | Open the PR |
+
+Start with `/office-hours` when approaching a new phase. It will read `docs/design.md` automatically and pick up where the design left off.
+
+---
+
+## Reference: Current Architecture
+
+```
+Daytona Runner (Go)
+  └─ DockerClient.Create(sandboxDto)
+       └─ Docker container
+            ├─ Agent code runs here
+            └─ Network: iptables per-sandbox CIDR chains
+                 → DROP or ACCEPT based on destination IP
+                 → No HTTP inspection. No secret handling.
+
+Daytona API (NestJS)
+  └─ JobService
+       ├─ Redis BRPOP — blocks waiting for job from runner
+       └─ Postgres — stores job state, sandbox metadata
+```
+
+---
+
+## Reference: Target Architecture (After Both Phases)
+
+```
+Daytona Runner (Go)
+  └─ GondolinClient.Create(sandboxDto)        ← Phase 3
+       └─ VM.create({ httpHooks, secrets })
+            └─ QEMU micro-VM
+                 ├─ Docker daemon (inside VM)
+                 ├─ Agent code (Docker container inside VM)
+                 └─ Gondolin network stack
+                      ├─ HTTP/TLS MITM — agent never sees real secrets
+                      ├─ onRequest hook → Postgres network_events
+                      └─ Per-host allowlists + DNS policy
+
+Daytona API (NestJS)
+  └─ Absurd on Postgres                        ← Phase 2
+       ├─ absurd.spawn() — durable task queue
+       ├─ ctx.step() — checkpointed execution
+       ├─ ctx.awaitEvent() — suspend on lifecycle events
+       └─ No Redis for job dispatch
+```
+
+---
+
+## Reference: Component Mapping
+
+| Component | Current | This Fork | Change |
+|---|---|---|---|
+| Sandbox networking | `apps/runner/pkg/netrules/` iptables | Gondolin `httpHooks` at VM level | Phase 3 |
+| Sandbox provisioning | `DockerClient.Create()` in Go | `GondolinClient.Create()` in Go | Phase 3 |
+| Job dispatch | Redis BRPOP in `job.service.ts` | Absurd `spawn()` / `startWorker()` | Phase 2 |
+| Workflow durability | None — stateless loop | Absurd steps + checkpoints | Phase 2 |
+| Secret handling | Env vars in container | Gondolin placeholder injection | Phase 3 |
+
+---
+
+## Reference: The Three Projects
+
+**Daytona** — [daytonaio/daytona](https://github.com/daytonaio/daytona) — 72,360 stars
+Stack: NestJS API, Go runner/daemon/CLI, Docker, Postgres, Redis. v0.168.0.
+
+**Gondolin** — [earendil-works/gondolin](https://github.com/earendil-works/gondolin) — 962 stars
+Author: Armin Ronacher (creator of Flask). TypeScript + QEMU. VM-level HTTP/TLS MITM proxy with JS hooks and secret placeholder injection. v0.7.0.
+
+**Absurd** — [earendil-works/absurd](https://github.com/earendil-works/absurd) — 1,568 stars
+Author: Armin Ronacher. Single `absurd.sql` + thin SDKs. Durable execution on Postgres — no extra services. Checkpointed steps, event-driven suspension. v0.3.0.
+
+---
+
+## The Core Insight
 
 > Gondolin's `onRequest` JS hook and Absurd's `awaitEvent()` are the same abstraction — a synchronous checkpoint in an otherwise async execution.
 
-Neither project was designed with the other in mind. Seeing that parallel, and building something that demonstrates it, is the point. That's the thing Armin would actually read.
+Neither project was designed with the other in mind. That parallel is what makes this integration worth building.
