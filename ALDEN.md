@@ -63,6 +63,37 @@ By the end of each phase you will have:
 
 ---
 
+## Use Daytona for your own projects
+
+Don't just study Daytona — use it. Every project you're already working on should run its code inside a Daytona sandbox. This is the fastest way to understand what it actually does, find the gaps, and have something real to write about.
+
+Practical starting point: pick one of your existing projects and replace wherever you currently run code locally with a Daytona sandbox. Use the Python or TypeScript SDK. When something feels awkward or breaks, that's a bug report or a PR.
+
+---
+
+## Write about it
+
+The goal is one public blog post, written in the style of [Maggie Appleton's digital garden](https://maggieappleton.com) — evergreen notes, a "planted on" date, honest and personal, essay-length. Not a tutorial. A point of view.
+
+**Inspiration to read first:**
+- Maggie's talk *"One Developer, Two Dozen Agents, Zero Alignment"* — the argument that all coding agents are single-player and that's wrong. The framing here (coordination over individual productivity, craft over volume) is a good lens for writing about what you're learning with Daytona.
+- [ColeMurray/background-agents](https://github.com/ColeMurray/background-agents) — a public repo showing background agent patterns. Look at how it's structured as a learning resource and how people engage with it.
+- The "paperclip maximizer" thought experiment — relevant if you write about AI agents that can exfiltrate secrets (Gap 1 in this project). An agent optimising for a goal with no constraints is the abstract version of what Gondolin is preventing architecturally.
+
+**What the post could be about:**
+A junior developer learning to read production codebases by building real integrations — not tutorials, not toy projects. What that actually feels like. What you found in the code that surprised you. Why Gondolin's `docker.json` example changed how you thought about VM isolation. What it means to make a real PR to a 72K-star repo as your first open source contribution.
+
+**It must include a demo recording.** Not a screen recording of typing — a demo of the thing working. Gondolin intercepting an HTTPS call. Absurd resuming a workflow after a crash. Something that makes someone watching say "oh, I get it now." Tools: Loom, Asciinema, or a short MP4 embedded in the post.
+
+**Format (Maggie Appleton style):**
+- Title that says something, not just describes the topic
+- "Planted [date]" at the top
+- Personal, first-person, specific — not generic developer content
+- One clear argument the reader can disagree with
+- Ends with an open question, not a conclusion
+
+---
+
 ## What ends up publicly visible
 
 Each phase produces something on your GitHub profile:
